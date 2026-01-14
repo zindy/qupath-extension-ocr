@@ -1,205 +1,215 @@
-# QuPath extension template
+# QuPath OCR Extension
 
-This repo contains a template and instructions to help create a new extension for [QuPath](https://qupath.github.io).
+A QuPath extension that provides Optical Character Recognition (OCR) capabilities for reading text from slide label images using Tesseract.
 
-It already contains two minimal extensions - one using Java, one using Groovy - so the first task is to make sure that they work.
-Then, it's a matter of customizing the code to make it more useful.
+## Features
 
-> **Update!** 
-> For QuPath v0.6.0 this repo switched to use Kotlin DSL for Gradle build files - 
-> and also to use the [QuPath Gradle Plugin](https://github.com/qupath/qupath-gradle-plugin).
-> 
-> The outcome is that the build files are _much_ simpler.
+- **Automatic Label Detection**: Automatically finds and uses the best available label image (label > macro > thumbnail)
+- **Flexible OCR Configuration**: Configure Tesseract parameters from Groovy scripts for optimal results
+- **Image Rotation Support**: Built-in support for rotating images by 90, 180, or 270 degrees
+- **Region-Based OCR**: Extract text from specific regions of label images
+- **Cross-Platform**: Includes native Tesseract libraries for Windows, Linux, and macOS
 
+## Installation
 
-## Build the extension
+1. Download the latest release from the [Releases](../../releases) page
+2. Drag and drop the `.jar` file into QuPath
+3. Restart QuPath
 
-Building the extension with Gradle should be pretty easy - you don't even need to install Gradle separately, because the 
-[Gradle Wrapper](https://docs.gradle.org/current/userguide/gradle_wrapper.html) will take care of that.
+## Basic Usage
 
-Open a command prompt, navigate to where the code lives, and use
+### Simple OCR on Label Image
+
+```groovy
+import qupath.ext.ocr.OcrTools
+
+def imageData = getCurrentImageData()
+
+// Read text from label with no rotation
+def text = OcrTools.readLabelText(imageData, 0)
+print(text)
+
+// Read text from rotated label (90 degrees)
+def rotatedText = OcrTools.readLabelText(imageData, 90)
+print(rotatedText)
+```
+
+### OCR on Specific Label Type
+
+```groovy
+import qupath.ext.ocr.OcrTools
+
+def imageData = getCurrentImageData()
+
+// Explicitly use the "macro" image
+def text = OcrTools.readLabelText(imageData, "macro", 0)
+print(text)
+```
+
+### OCR on Cropped Region
+
+This example will actually return a plausible output for the [OS-2.ndpi](https://openslide.cs.cmu.edu/download/openslide-testdata/Hamamatsu/) image.
+
+```groovy
+import qupath.ext.ocr.OcrTools
+
+def imageData = getCurrentImageData()
+
+// Read text from a specific region (x, y, width, height, angle)
+def text = OcrTools.readLabelText(imageData, "macro", 0, 0, 70, 400, 90)
+print(text)
+```
+
+## Advanced Configuration
+
+The real power of this extension comes from being able to configure Tesseract parameters directly from Groovy scripts to improve detection accuracy.
+
+### Custom Tesseract Configuration
+
+```groovy
+import qupath.ext.ocr.OcrTools
+
+def imageData = getCurrentImageData()
+
+// initialize / reinitialize the Tesseract instance
+def tesseract = OcrTools.initTesseract()
+
+// Configure it as needed
+//tesseract.setPageSegMode(3)   // Different page segmentation mode
+tesseract.setPageSegMode(6)  // Assume uniform block of text
+tesseract.setOcrEngineMode(1) // Use LSTM engine only
+tesseract.setVariable("tessedit_char_whitelist", "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZmil-.;_ "); //Limit the characters
+
+// Then use the OCR functions as normal
+def text = OcrTools.readLabelText(getCurrentImageData(),"macro", 0, 0, 70, 400, 90)
+print(text)
+```
+
+### Common Tesseract Parameters
+
+**Page Segmentation Modes** (`setPageSegMode`):
+- `0` - Orientation and script detection (OSD) only
+- `1` - Automatic page segmentation with OSD (default)
+- `3` - Fully automatic page segmentation, but no OSD
+- `4` - Assume a single column of text of variable sizes
+- `6` - Assume a single uniform block of text
+- `7` - Treat the image as a single text line
+- `11` - Sparse text - find as much text as possible in no particular order
+- `13` - Raw line - treat image as a single text line, bypassing hacks specific to Tesseract
+
+**OCR Engine Modes** (`setOcrEngineMode`):
+- `0` - Legacy engine only
+- `1` - Neural nets LSTM engine only (default)
+- `2` - Legacy + LSTM engines
+- `3` - Default, based on what is available
+
+**Languages** (`setLanguage`):
+- `"eng"` - English (default)
+- `"deu"` - German
+- `"fra"` - French
+- `"spa"` - Spanish
+- Multiple languages: `"eng+deu"`
+
+### Example: Optimized Configuration for Dense Text
+
+```groovy
+import qupath.ext.ocr.OcrTools
+
+def tesseract = OcrTools.getTesseract()
+
+// Configure for dense, uniform text blocks
+tesseract.setPageSegMode(6)    // Single uniform block
+tesseract.setOcrEngineMode(1)  // LSTM only for better accuracy
+
+def imageData = getCurrentImageData()
+def text = OcrTools.readLabelText(imageData, 0)
+print(text)
+```
+
+## API Reference
+
+### `OcrTools` Methods
+
+#### `initTesseract()`
+Initialize or reinitialize Tesseract with default settings.
+
+**Returns**: `ITesseract` - The initialized Tesseract instance
+
+#### `getTesseract()`
+Get the current Tesseract instance. Automatically initializes if not already done.
+
+**Returns**: `ITesseract` - The Tesseract instance for configuration
+
+#### `readLabelText(ImageData<?> imageData, int angle)`
+Read text from the best available label image.
+
+**Parameters**:
+- `imageData` - The current image data
+- `angle` - Rotation angle (0, 90, 180, or 270)
+
+**Returns**: `String` - Extracted text
+
+#### `readLabelText(ImageData<?> imageData, String labelName, int angle)`
+Read text from a specific named label image.
+
+**Parameters**:
+- `imageData` - The current image data
+- `labelName` - Name of the associated image ("label", "macro", "thumbnail", etc.)
+- `angle` - Rotation angle (0, 90, 180, or 270)
+
+**Returns**: `String` - Extracted text
+
+#### `readLabelText(ImageData<?> imageData, String labelName, int x, int y, int w, int h, int angle)`
+Read text from a cropped region of a label image.
+
+**Parameters**:
+- `imageData` - The current image data
+- `labelName` - Name of the associated image (null for auto-detect)
+- `x` - X coordinate of crop region
+- `y` - Y coordinate of crop region
+- `w` - Width of crop region
+- `h` - Height of crop region
+- `angle` - Rotation angle (0, 90, 180, or 270)
+
+**Returns**: `String` - Extracted text
+
+#### `getLabelImage(ImageData<?> imageData, String labelName)`
+Get the label image as a BufferedImage.
+
+**Returns**: `BufferedImage` - The label image, or null if not found
+
+#### `getLabelDimensions(ImageData<?> imageData, String labelName)`
+Get the dimensions of the label image.
+
+**Returns**: `Dimension` - Image dimensions, or null if image not found
+
+## Requirements
+
+- QuPath v0.5.0 or later
+- Java 11 or later
+
+## Building from Source
+
 ```bash
-gradlew build
+./gradlew clean shadowJar
 ```
 
-The built extension should be found inside `build/libs`.
-You can drag this onto QuPath to install it.
-You'll be prompted to create a user directory if you don't already have one.
-
-The minimal extension here doesn't do much, but it should at least install a new command under the 'Extensions' menu in 
-QuPath.
-
-> In case your extension contains external dependencies beyond what QuPath already includes, you can create a 
-> [single jar file](https://imperceptiblethoughts.com/shadow/introduction/#benefits-of-shadow) that bundles these along 
-> with your extension by using
-> ```bash
-> gradlew shadowJar
-> ```
-> If you don't do that, you'll need to drag *all* the extra dependences onto QuPath to install them as well.
-
-
-## Configure the extension
-
-Edit `settings.gradle.kts` to specify which version of QuPath your extension should be compatible with, e.g.
-
-```kotlin
-qupath {
-    version = "0.6.0"
-}
-```
-
-Edit `build.gradle.kts` to specify the details of your extension
-
-```kotlin
-qupathExtension {
-  name = "qupath-extension-template"
-  group = "io.github.qupath"
-  version = "0.1.0-SNAPSHOT"
-  description = "A simple QuPath extension"
-  automaticModule = "io.github.qupath.extension.template"
-}
-```
-
-
-## Run QuPath + the extension
-
-During development, your probably want to run QuPath easily with your extension installed for debugging.
-
-### 0. Make sure you have Java installed
-You'll need to install Java first.
-
-At the time of writing, we use a Java 21 JDK downloaded from https://adoptium.net/
-
-> Java 21 is a 'Long Term Support' release - which is why we use it instead of the very latest version.
-
-### 1. Get QuPath's source code
-You can find instructions at https://qupath.readthedocs.io/en/stable/docs/reference/building.html
-
-### 2. Create an `include-extra` file
-Create a file called `include-extra` in the root directory of the QuPath source code (*not* the extension code!).
-
-Set the contents of this file to:
-```
-[includeBuild]
-/path/to/your/extension
-
-[dependencies]
-extension-group:extension-name
-```
-replacing the default lines where needed.
-
-For example, to build the extension with the names given above you'd use
-```
-[includeBuild]
-../qupath-extension-template
-
-[dependencies]
-io.github.qupath:qupath-extension-template
-```
-
-### 3. Run QuPath
-Run QuPath from the command line using
-```
-gradlew run
-```
-If all goes well, QuPath should launch and you can check the *Extensions* mention to confirm the extension is installed.
-
-
-## Set up in an IDE (optional)
-
-During development, things are likely to be much easier if you work within an IDE.
-
-QuPath itself is developed using IntelliJ, and you can import the extension template there.
-
-The setup process is as above, and you'll need a a [Run configuration](https://www.jetbrains.com/help/idea/run-debug-configuration.html) 
-to call `gradlew run`.
-
-
-## Customize the extension
-
-Now you're ready for the creative part.
-
-You can develop the extension using either Java or Groovy - the template includes examples of both.
-
-### Create the extension Java or Groovy file(s)
-
-For the extension to work, you need to create at least one file that extends `qupath.lib.gui.extensions.QuPathExtension`.
-
-There are two examples in the template, in two languages:
-* **Java:** `qupath.ext.template.DemoExtension.java`.
-* **Groovy:** `qupath.ext.template.DemoGroovyExtension.java`.
-
-You can pick the one that corresponds to the language you want to use, and delete the other.
-
-Then take your chosen file and rename it, edit it, move it to another package... basically, make it your own.
-
-> Please **don't neglect this step!** 
-> If you do, there's a chance of multiple extensions being created with the same class names... and causing confusion later.
-
-### Update the `META-INF/services` file
-
-For QuPath to *find* the extension later, the full class name needs to be available in `resources/META-INFO/services/qupath.lib.gui.extensions.QuPathExtensions`.
-
-So remember to edit that file to include the class name that you actually used for your extension.
-
-### Specify your license
-
-Add a license file to your GitHub repo so that others know what they can and can't do with your extension.
-
-This should be compatible with QuPath's license -- see https://github.com/qupath/qupath
-
-## Repository configuration
-
-### Easy install
-
-If you follow some conventions in naming your extension and making releases, then other QuPath users will find it easy to automatically
-install and update your extension!
-
-First, we suggest you name your extension `qupath-extension-[something]`, and keep it in its own repository (named the same as the extension),
-separate from other projects.
-
-Next, when you want to publish a new version of your extension, use the `github_release.yml` workflow included in this repository.
-
-To do so, you'd need to navigate to `Actions -> Make draft release -> Run workflow -> Run workflow` as shown in the following screenshot:
-
-![Screenshot from 2024-03-14 18-44-42](https://github.com/alanocallaghan/qupath-extension-template/assets/10779688/4712a209-eda7-4f80-8bed-bbab20e4f50a)
-
-This will automatically build the extension, and create a draft release containing the extension jar (and its associated sources and javadoc).
-You can then navigate to `Releases` and fill out information about the release --- the version, any significant changes, etc.
-Once published, users will be able to automatically install the extension as described here:
-https://qupath.readthedocs.io/en/0.5/docs/intro/extensions.html#installing-extensions
-
-### Catalogs
-
-QuPath's extension manager can easily install an extension if it is referenced in a **catalog**.
-A catalog is a JSON file hosted on a GitHub repository containing information about extensions, making it possible to easily manage them from QuPath.
-
-To create a catalog, follow the [extension catalog model documentation](https://qupath.github.io/extension-catalog-model/).
-You will need to create a JSON file containing specific information about your extension and host it on a dedicated GitHub repository.
-Once the catalog is created, any user will be able to easily install your catalog by:
-
-* Opening QuPath's extension manager by clicking on `Extensions` -> `Manage extensions` in QuPath.
-* Adding the URL to your catalog by clicking on `Manage extension catalogs` -> `Add` in the extension manager.
-* Clicking on the `+` symbol next to your extension in the extension manager.
-
-QuPath will then make it easy to manage your extension and automatically inform users when an update is available.
-
-### Replace this readme
-
-Don't forget to replace the contents of this readme with your own!
-
-
-## Getting help
-
-For questions about QuPath and/or creating new extensions, please use the forum at https://forum.image.sc/tag/qupath
-
-------
+The extension JAR will be created in `build/libs/`.
 
 ## License
 
-This is just a template, you're free to use it however you like.
-You can treat the contents of *this repository only* as being under [the Unlicense](https://unlicense.org) (except for the Gradle wrapper, which has its own license included).
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
 
-If you use it to create a new QuPath extension, I'd strongly encourage you to select a suitable open-source license for the extension.
+http://www.apache.org/licenses/LICENSE-2.0
 
-Note that *QuPath itself* is available under the GPL, so you do have to abide by those terms: see https://github.com/qupath/qupath for more.
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Acknowledgments
+
+- Built with [Tesseract OCR](https://github.com/tesseract-ocr/tesseract)
+- Uses [Tess4J](https://github.com/nguyenq/tess4j) Java wrapper
+- Designed for [QuPath](https://qupath.github.io/)
