@@ -16,7 +16,7 @@ rootProject.name = "qupath-extension-ocr"
 
 // Specify which version of QuPath the extension is targeting
 qupath {
-    version = "0.6.0"
+    version = "0.7.0"
 }
 
 dependencyResolutionManagement {
